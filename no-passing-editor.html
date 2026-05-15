@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>No Passing — Level Editor</title>
+<style>
+  :root {
+    --bg: #1a1614;
+    --panel: #252220;
+    --panel-2: #2f2b28;
+    --ink: #e8dfd4;
+    --ink-dim: #8a7f72;
+    --line: #3d3733;
+    --accent: #d4a574;
+    --red: #c44545;
+    --green: #5fa85f;
+    --yellow: #d4a132;
+    --tile: 32px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', 'SimHei', monospace;
+    background: var(--bg);
+    color: var(--ink);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+    font-size: 13px;
+  }
+
+  /* ===== Sidebar ===== */
+  aside {
+    width: 230px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .brand {
+    padding: 16px 14px;
+    border-bottom: 1px solid var(--line);
+    letter-spacing: 1px;
+    position: relative;
+  }
+  .brand h1 { font-size: 14px; color: var(--accent); margin-bottom: 4px; }
+  .brand p { font-size: 10px; color: var(--ink-dim); }
+
+  /* language toggle in the top-right of the brand block */
+  .lang-toggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--line);
+  }
+  .lang-toggle button {
+    background: transparent;
+    border: none;
+    color: var(--ink-dim);
+    padding: 3px 7px;
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .lang-toggle button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .section h2 {
+    font-size: 10px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .tools { display: flex; flex-direction: column; gap: 4px; }
+  .tool-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 8px 10px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    transition: all 0.1s;
+  }
+  .tool-btn:hover { border-color: var(--accent); }
+  .tool-btn.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .tool-swatch {
+    width: 18px; height: 18px;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .tool-key {
+    margin-left: auto;
+    color: var(--ink-dim);
+    font-size: 10px;
+  }
+  .tool-btn.active .tool-key { color: var(--bg); opacity: 0.7; }
+
+  .field { margin-bottom: 8px; }
+  .field label {
+    display: block;
+    font-size: 10px;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .actions { display: flex; flex-direction: column; gap: 6px; }
+  .btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 9px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ===== Main ===== */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+  }
+  .topbar .info { color: var(--ink-dim); }
+  .topbar .info b { color: var(--ink); }
+
+  .canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    background: #0f0d0c;
+    position: relative;
+    padding: 24px;
+  }
+  #grid {
+    display: grid;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    width: max-content;
+    user-select: none;
+  }
+  .cell {
+    width: var(--tile);
+    height: var(--tile);
+    border-right: 1px solid rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: relative;
+    cursor: crosshair;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: rgba(255,255,255,0.5);
+  }
+  .cell:hover { background: rgba(212, 165, 116, 0.15); }
+
+  /* Tile visuals */
+  .t-platform { background: #6b5d4d; }
+  .t-spike {
+    background: linear-gradient(45deg, var(--red) 25%, transparent 25%),
+                linear-gradient(-45deg, var(--red) 25%, transparent 25%);
+    background-size: 8px 8px;
+    background-color: #4a2020;
+  }
+  .t-start { background: var(--green); }
+  .t-start::after { content: 'S'; color: var(--bg); font-weight: bold; }
+  .t-goal { background: var(--accent); }
+  .t-goal::after { content: 'G'; color: var(--bg); font-weight: bold; }
+  .t-checkpoint { background: #4a90d4; }
+  .t-checkpoint::after { content: '★'; color: var(--bg); }
+  .t-moving { background: #8b6f9b; }
+  .t-moving::after { content: '↔'; color: var(--bg); font-weight: bold; }
+  .t-light-zone {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(212, 165, 50, 0.25),
+      rgba(212, 165, 50, 0.25) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  }
+  .t-light-zone::after {
+    content: '◉';
+    color: var(--yellow);
+    font-size: 14px;
+  }
+
+  /* Modal */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal.show { display: flex; }
+  .modal-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 20px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-box h3 {
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+  .modal-box textarea {
+    flex: 1;
+    min-height: 240px;
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    resize: vertical;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    justify-content: flex-end;
+  }
+
+  .hint {
+    font-size: 10px;
+    color: var(--ink-dim);
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  .status {
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 6px 14px;
+    font-size: 10px;
+    color: var(--ink-dim);
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <h1 data-i18n="brand_title">NO PASSING</h1>
+    <p data-i18n="brand_sub">LEVEL EDITOR // RED LIGHT, GREEN LIGHT</p>
+    <div class="lang-toggle">
+      <button id="lang-en" class="active" onclick="setLang('en')">EN</button>
+      <button id="lang-zh" onclick="setLang('zh')">中</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 data-i18n="section_tools">Tools</h2>
+    <div class="tools" id="tools"></div>
+  </div>
+
+  <div class="section">
+    <h2 data-i18n="section_grid">Grid</h2>
+    <div class="field">
+      <label data-i18n="label_width">Width</label>
+      <input type="number" id="gridW" value="40" min="10" max="200">
+    </div>
+    <div class="field">
+      <label data-i18n="label_height">Height</label>
+      <input type="number" id="gridH" value="20" min="8" max="100">
+    </div>
+    <button class="btn ghost" onclick="resizeGrid()" data-i18n="btn_apply_size">Apply Size</button>
+  </div>
+
+  <div class="section">
+    <h2 data-i18n="section_light">Traffic Light</h2>
+    <div class="field">
+      <label data-i18n="label_green">Green duration (s)</label>
+      <input type="number" id="greenDur" value="3" min="0.5" step="0.5">
+    </div>
+    <div class="field">
+      <label data-i18n="label_yellow">Yellow warning (s)</label>
+      <input type="number" id="yellowDur" value="1" min="0" step="0.5">
+    </div>
+    <div class="field">
+      <label data-i18n="label_red">Red duration (s)</label>
+      <input type="number" id="redDur" value="2.5" min="0.5" step="0.5">
+    </div>
+    <p class="hint" data-i18n="hint_light">Red light: all movement freezes. Player moving = sent back to last checkpoint.</p>
+  </div>
+
+  <div class="section">
+    <h2 data-i18n="section_info">Level Info</h2>
+    <div class="field">
+      <label data-i18n="label_name">Name</label>
+      <input type="text" id="levelName" value="level_01">
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 data-i18n="section_actions">Actions</h2>
+    <div class="actions">
+      <button class="btn" onclick="exportLevel()" data-i18n="btn_export">EXPORT JSON</button>
+      <button class="btn ghost" onclick="openImport()" data-i18n="btn_import">IMPORT JSON</button>
+      <button class="btn ghost" onclick="clearGrid()" data-i18n="btn_clear">CLEAR ALL</button>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <div class="topbar">
+    <span class="info"><span data-i18n="top_tool">Tool</span>: <b id="curTool">platform</b></span>
+    <span class="info"><span data-i18n="top_cell">Cell</span>: <b id="curCell">-</b></span>
+    <span class="info" style="margin-left:auto" data-i18n="top_help">Left click: place &nbsp;|&nbsp; Right click: erase &nbsp;|&nbsp; Drag: paint</span>
+  </div>
+  <div class="canvas-wrap">
+    <div id="grid"></div>
+  </div>
+  <div class="status" data-i18n="status_line">NO PASSING LEVEL EDITOR v1 // Output: .json compatible with Godot LevelLoader</div>
+</main>
+
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <h3 id="modalTitle">Export</h3>
+    <textarea id="modalText" spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="copyJSON()" id="copyBtn" data-i18n="btn_copy">COPY</button>
+      <button class="btn ghost" onclick="downloadJSON()" id="dlBtn" data-i18n="btn_download">DOWNLOAD</button>
+      <button class="btn" onclick="loadFromText()" id="importBtn" style="display:none" data-i18n="btn_load">LOAD</button>
+      <button class="btn ghost" onclick="closeModal()" data-i18n="btn_close">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== i18n =====
+const I18N = {
+  en: {
+    brand_title: 'NO PASSING',
+    brand_sub: 'LEVEL EDITOR // RED LIGHT, GREEN LIGHT',
+    section_tools: 'Tools',
+    section_grid: 'Grid',
+    section_light: 'Traffic Light',
+    section_info: 'Level Info',
+    section_actions: 'Actions',
+    label_width: 'Width',
+    label_height: 'Height',
+    label_green: 'Green duration (s)',
+    label_yellow: 'Yellow warning (s)',
+    label_red: 'Red duration (s)',
+    label_name: 'Name',
+    btn_apply_size: 'Apply Size',
+    btn_export: 'EXPORT JSON',
+    btn_import: 'IMPORT JSON',
+    btn_clear: 'CLEAR ALL',
+    btn_copy: 'COPY',
+    btn_download: 'DOWNLOAD',
+    btn_load: 'LOAD',
+    btn_close: 'CLOSE',
+    btn_copied: 'COPIED!',
+    hint_light: 'Red light: all movement freezes. Player moving = sent back to last checkpoint.',
+    top_tool: 'Tool',
+    top_cell: 'Cell',
+    top_help: 'Left click: place &nbsp;|&nbsp; Right click: erase &nbsp;|&nbsp; Drag: paint',
+    status_line: 'NO PASSING LEVEL EDITOR v1 // Output: .json compatible with Godot LevelLoader',
+    tool_empty: 'Erase',
+    tool_platform: 'Platform',
+    tool_spike: 'Spike',
+    tool_start: 'Start',
+    tool_goal: 'Goal',
+    tool_checkpoint: 'Checkpoint',
+    tool_moving: 'Moving Plat.',
+    tool_light_zone: 'Light Zone',
+    confirm_clear: 'Clear the whole grid?',
+    confirm_no_start: 'No START tile placed. Export anyway?',
+    confirm_no_goal: 'No GOAL tile placed. Export anyway?',
+    import_placeholder: 'Paste level JSON here...',
+    invalid_json: 'Invalid JSON: ',
+    modal_export: 'Export — ',
+    modal_import: 'Import JSON',
+  },
+  zh: {
+    brand_title: '禁止通行',
+    brand_sub: '关卡编辑器 // 红灯停 · 绿灯行',
+    section_tools: '工具',
+    section_grid: '网格',
+    section_light: '红绿灯',
+    section_info: '关卡信息',
+    section_actions: '操作',
+    label_width: '宽度',
+    label_height: '高度',
+    label_green: '绿灯时长 (秒)',
+    label_yellow: '黄灯预警 (秒)',
+    label_red: '红灯时长 (秒)',
+    label_name: '名称',
+    btn_apply_size: '应用尺寸',
+    btn_export: '导出 JSON',
+    btn_import: '导入 JSON',
+    btn_clear: '清空',
+    btn_copy: '复制',
+    btn_download: '下载',
+    btn_load: '加载',
+    btn_close: '关闭',
+    btn_copied: '已复制!',
+    hint_light: '红灯期间全场冻结. 玩家移动 = 回到上一个检查点.',
+    top_tool: '工具',
+    top_cell: '坐标',
+    top_help: '左键: 放置 &nbsp;|&nbsp; 右键: 擦除 &nbsp;|&nbsp; 拖动: 批量绘制',
+    status_line: '禁止通行 关卡编辑器 v1 // 输出 .json 直接导入 Godot',
+    tool_empty: '擦除',
+    tool_platform: '平台',
+    tool_spike: '尖刺',
+    tool_start: '起点',
+    tool_goal: '终点',
+    tool_checkpoint: '检查点',
+    tool_moving: '移动平台',
+    tool_light_zone: '红绿灯区域',
+    confirm_clear: '清空整个网格?',
+    confirm_no_start: '没有放置起点. 仍要导出吗?',
+    confirm_no_goal: '没有放置终点. 仍要导出吗?',
+    import_placeholder: '把关卡 JSON 粘贴到这里...',
+    invalid_json: 'JSON 格式错误: ',
+    modal_export: '导出 — ',
+    modal_import: '导入 JSON',
+  }
+};
+
+let lang = 'en';
+
+function t(key) {
+  return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+}
+
+function setLang(l) {
+  if (!I18N[l]) return;
+  lang = l;
+  document.documentElement.lang = (l === 'zh' ? 'zh-CN' : 'en');
+  document.getElementById('lang-en').classList.toggle('active', l === 'en');
+  document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
+  // apply to all [data-i18n] elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.innerHTML = t(el.dataset.i18n);
+  });
+  // rebuild tool buttons to refresh their labels
+  buildTools();
+}
+
+// ===== Tile types =====
+const TILES = [
+  { id: 'empty',      i18nKey: 'tool_empty',      cls: '',              key: '0' },
+  { id: 'platform',   i18nKey: 'tool_platform',   cls: 't-platform',    key: '1' },
+  { id: 'spike',      i18nKey: 'tool_spike',      cls: 't-spike',       key: '2' },
+  { id: 'start',      i18nKey: 'tool_start',      cls: 't-start',       key: '3' },
+  { id: 'goal',       i18nKey: 'tool_goal',       cls: 't-goal',        key: '4' },
+  { id: 'checkpoint', i18nKey: 'tool_checkpoint', cls: 't-checkpoint',  key: '5' },
+  { id: 'moving',     i18nKey: 'tool_moving',     cls: 't-moving',      key: '6' },
+  { id: 'light_zone', i18nKey: 'tool_light_zone', cls: 't-light-zone',  key: '7' },
+];
+const SINGLETONS = new Set(['start', 'goal']);
+
+let gridW = 40, gridH = 20;
+let cells = [];
+let currentTool = 'platform';
+let isPainting = false;
+let paintMode = null;
+
+function buildTools() {
+  const c = document.getElementById('tools');
+  c.innerHTML = '';
+  TILES.forEach(tile => {
+    const b = document.createElement('button');
+    b.className = 'tool-btn' + (tile.id === currentTool ? ' active' : '');
+    b.dataset.tool = tile.id;
+    b.innerHTML = `<div class="tool-swatch ${tile.cls}"></div><span>${t(tile.i18nKey)}</span><span class="tool-key">[${tile.key}]</span>`;
+    b.onclick = () => selectTool(tile.id);
+    c.appendChild(b);
+  });
+}
+
+function selectTool(id) {
+  currentTool = id;
+  document.getElementById('curTool').textContent = id;
+  document.querySelectorAll('.tool-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tool === id);
+  });
+}
+
+
+
+function buildGrid() {
+  const g = document.getElementById('grid');
+  g.style.gridTemplateColumns = `repeat(${gridW}, var(--tile))`;
+  g.style.gridTemplateRows = `repeat(${gridH}, var(--tile))`;
+  g.innerHTML = '';
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      d.dataset.x = x;
+      d.dataset.y = y;
+      g.appendChild(d);
+    }
+  }
+  // Pointer events delegated on the grid container. We derive the cell
+  // from pointer coords (not mouseenter) so fast drags can't skip cells.
+  g.onpointerdown  = onPointerDown;
+  g.onpointermove  = onPointerMove;
+  g.oncontextmenu  = e => e.preventDefault();
+  // Disable native touch scrolling so dragging on touchscreens paints.
+  g.style.touchAction = 'none';
+  renderAll();
+}
+
+function ensureCells() {
+  const newCells = [];
+  for (let y = 0; y < gridH; y++) {
+    const row = [];
+    for (let x = 0; x < gridW; x++) {
+      row.push(cells[y] && cells[y][x] ? cells[y][x] : 'empty');
+    }
+    newCells.push(row);
+  }
+  cells = newCells;
+}
+
+function renderAll() {
+  const g = document.getElementById('grid');
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const cell = g.children[y * gridW + x];
+      const id = cells[y][x];
+      const tile = TILES.find(t => t.id === id);
+      cell.className = 'cell' + (tile && tile.cls ? ' ' + tile.cls : '');
+    }
+  }
+}
+
+function paintCell(x, y, toolId) {
+  if (x < 0 || x >= gridW || y < 0 || y >= gridH) return;
+  // Singletons (Start, Goal): only one allowed in the whole level.
+  // When painting via drag, only place on the very first cell of the
+  // stroke — otherwise the marker would jump along with the cursor and
+  // end up wherever you happened to release, which is confusing.
+  if (SINGLETONS.has(toolId)) {
+    if (isPainting && (lastPaintX !== -1 || lastPaintY !== -1)) {
+      // already placed once this stroke — ignore further cells
+      return;
+    }
+    for (let yy = 0; yy < gridH; yy++) {
+      for (let xx = 0; xx < gridW; xx++) {
+        if (cells[yy][xx] === toolId) cells[yy][xx] = 'empty';
+      }
+    }
+  }
+  cells[y][x] = toolId;
+  const cell = document.getElementById('grid').children[y * gridW + x];
+  const tile = TILES.find(t => t.id === toolId);
+  if (SINGLETONS.has(toolId)) renderAll();
+  else cell.className = 'cell' + (tile && tile.cls ? ' ' + tile.cls : '');
+}
+
+// Last painted cell — used to interpolate between pointer samples when
+// the cursor moves faster than the browser fires pointermove events.
+let lastPaintX = -1, lastPaintY = -1;
+
+function pointerToCell(e) {
+  const g = document.getElementById('grid');
+  const rect = g.getBoundingClientRect();
+  const tile = g.firstChild ? g.firstChild.offsetWidth : 32;
+  const x = Math.floor((e.clientX - rect.left) / tile);
+  const y = Math.floor((e.clientY - rect.top)  / tile);
+  if (x < 0 || x >= gridW || y < 0 || y >= gridH) return null;
+  return { x, y };
+}
+
+// Bresenham-style line so a fast drag fills every cell between samples.
+function paintLine(x0, y0, x1, y1, toolId) {
+  const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  let x = x0, y = y0;
+  let guard = 10000;  // safety cap
+  while (guard-- > 0) {
+    paintCell(x, y, toolId);
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
+
+function onPointerDown(e) {
+  if (e.button !== 0 && e.button !== 2) return;
+  const cell = pointerToCell(e);
+  if (!cell) return;
+  e.preventDefault();
+  // capture so we keep getting events even if pointer leaves the grid
+  e.currentTarget.setPointerCapture(e.pointerId);
+  isPainting = true;
+  paintMode = (e.button === 2) ? 'erase' : 'place';
+  const toolId = paintMode === 'erase' ? 'empty' : currentTool;
+  paintCell(cell.x, cell.y, toolId);
+  lastPaintX = cell.x;
+  lastPaintY = cell.y;
+  document.getElementById('curCell').textContent = `${cell.x}, ${cell.y}`;
+}
+
+function onPointerMove(e) {
+  const cell = pointerToCell(e);
+  if (!cell) return;
+  document.getElementById('curCell').textContent = `${cell.x}, ${cell.y}`;
+  if (!isPainting) return;
+  if (cell.x === lastPaintX && cell.y === lastPaintY) return;
+  const toolId = paintMode === 'erase' ? 'empty' : currentTool;
+  // Interpolate from last painted to current so fast drags fill every cell.
+  paintLine(lastPaintX, lastPaintY, cell.x, cell.y, toolId);
+  lastPaintX = cell.x;
+  lastPaintY = cell.y;
+}
+
+function endPaint() {
+  isPainting = false;
+  paintMode = null;
+  lastPaintX = -1;
+  lastPaintY = -1;
+}
+document.addEventListener('pointerup', endPaint);
+document.addEventListener('pointercancel', endPaint);
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const tile = TILES.find(t => t.key === e.key);
+  if (tile) selectTool(tile.id);
+});
+
+function resizeGrid() {
+  gridW = Math.max(10, Math.min(200, +document.getElementById('gridW').value || 40));
+  gridH = Math.max(8,  Math.min(100, +document.getElementById('gridH').value || 20));
+  ensureCells();
+  buildGrid();
+}
+
+function clearGrid() {
+  if (!confirm(t('confirm_clear'))) return;
+  cells = Array.from({length: gridH}, () => Array.from({length: gridW}, () => 'empty'));
+  renderAll();
+}
+
+function buildLevelObject() {
+  const tiles = [];
+  let start = null, goal = null;
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const id = cells[y][x];
+      if (id === 'empty') continue;
+      if (id === 'start')      { start = {x, y}; continue; }
+      if (id === 'goal')       { goal  = {x, y}; continue; }
+      tiles.push({ type: id, x, y });
+    }
+  }
+  return {
+    version: 1,
+    name: document.getElementById('levelName').value || 'untitled',
+    grid: { width: gridW, height: gridH, tile_size: 32 },
+    traffic_light: {
+      green:  +document.getElementById('greenDur').value  || 3,
+      yellow: +document.getElementById('yellowDur').value || 1,
+      red:    +document.getElementById('redDur').value    || 2.5,
+    },
+    start: start,
+    goal: goal,
+    tiles: tiles,
+  };
+}
+
+function exportLevel() {
+  const obj = buildLevelObject();
+  if (!obj.start && !confirm(t('confirm_no_start'))) return;
+  if (!obj.goal  && !confirm(t('confirm_no_goal'))) return;
+  document.getElementById('modalTitle').textContent = t('modal_export') + obj.name + '.json';
+  document.getElementById('modalText').value = JSON.stringify(obj, null, 2);
+  document.getElementById('importBtn').style.display = 'none';
+  document.getElementById('dlBtn').style.display = '';
+  document.getElementById('modal').classList.add('show');
+}
+
+function openImport() {
+  document.getElementById('modalTitle').textContent = t('modal_import');
+  document.getElementById('modalText').value = '';
+  document.getElementById('modalText').placeholder = t('import_placeholder');
+  document.getElementById('importBtn').style.display = '';
+  document.getElementById('dlBtn').style.display = 'none';
+  document.getElementById('modal').classList.add('show');
+}
+
+function loadFromText() {
+  try {
+    const obj = JSON.parse(document.getElementById('modalText').value);
+    applyLevel(obj);
+    closeModal();
+  } catch (e) {
+    alert(t('invalid_json') + e.message);
+  }
+}
+
+function applyLevel(obj) {
+  gridW = obj.grid.width;
+  gridH = obj.grid.height;
+  document.getElementById('gridW').value = gridW;
+  document.getElementById('gridH').value = gridH;
+  document.getElementById('levelName').value = obj.name || 'untitled';
+  if (obj.traffic_light) {
+    document.getElementById('greenDur').value  = obj.traffic_light.green;
+    document.getElementById('yellowDur').value = obj.traffic_light.yellow;
+    document.getElementById('redDur').value    = obj.traffic_light.red;
+  }
+  cells = Array.from({length: gridH}, () => Array.from({length: gridW}, () => 'empty'));
+  (obj.tiles || []).forEach(tile => {
+    if (tile.y < gridH && tile.x < gridW) cells[tile.y][tile.x] = tile.type;
+  });
+  if (obj.start) cells[obj.start.y][obj.start.x] = 'start';
+  if (obj.goal)  cells[obj.goal.y][obj.goal.x]  = 'goal';
+  buildGrid();
+}
+
+function copyJSON() {
+  const ta = document.getElementById('modalText');
+  ta.select();
+  document.execCommand('copy');
+  const btn = document.getElementById('copyBtn');
+  const old = btn.textContent;
+  btn.textContent = t('btn_copied');
+  setTimeout(() => btn.textContent = t('btn_copy'), 1200);
+}
+
+function downloadJSON() {
+  const obj = buildLevelObject();
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (obj.name || 'level') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+// ===== Boot =====
+ensureCells();
+buildTools();
+buildGrid();
+
+// demo seed
+(function seed() {
+  for (let x = 2; x < gridW - 2; x++) cells[gridH - 3][x] = 'platform';
+  cells[gridH - 4][3] = 'start';
+  cells[gridH - 4][gridW - 4] = 'goal';
+  cells[gridH - 4][Math.floor(gridW / 2)] = 'spike';
+  cells[gridH - 4][Math.floor(gridW / 2) + 4] = 'checkpoint';
+  for (let i = 0; i < 4; i++) cells[gridH - 5][Math.floor(gridW / 2) - 4 + i] = 'light_zone';
+  renderAll();
+})();
+</script>
+</body>
+</html>
