@@ -234,6 +234,43 @@
     font-size: 14px;
   }
 
+  /* Collectible — a small glowing gem */
+  .t-collectible {
+    background: radial-gradient(circle at 50% 45%,
+      rgba(212, 165, 116, 0.4) 0%,
+      rgba(212, 165, 116, 0.1) 60%,
+      transparent 70%);
+  }
+  .t-collectible::after {
+    content: '◆';
+    color: var(--accent);
+    font-size: 18px;
+    text-shadow: 0 0 6px rgba(212, 165, 116, 0.8);
+  }
+
+  /* Archer — dark stone block with a directional arrow */
+  .t-archer-l, .t-archer-r {
+    background: #3a3530;
+    border: 1px solid rgba(196, 69, 69, 0.5);
+  }
+  .t-archer-l::after { content: '◀'; color: var(--red); font-size: 16px; font-weight: bold; }
+  .t-archer-r::after { content: '▶'; color: var(--red); font-size: 16px; font-weight: bold; }
+
+  /* Arrow trajectory preview (dashed line from archer to edge) */
+  .archer-path {
+    position: absolute;
+    height: 2px;
+    background: repeating-linear-gradient(
+      to right,
+      rgba(196, 69, 69, 0.5) 0,
+      rgba(196, 69, 69, 0.5) 6px,
+      transparent 6px,
+      transparent 10px
+    );
+    pointer-events: none;
+    z-index: 4;
+  }
+
   /* Modal */
   .modal {
     position: fixed;
@@ -294,6 +331,81 @@
     color: var(--ink-dim);
     letter-spacing: 1px;
   }
+
+  /* ===== Moving platform path preview overlay ===== */
+  .mv-path {
+    position: absolute;
+    background: rgba(139, 111, 155, 0.35);
+    border: 1px dashed rgba(139, 111, 155, 0.9);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .mv-endpoint {
+    position: absolute;
+    width: calc(var(--tile) - 4px);
+    height: calc(var(--tile) - 4px);
+    border: 2px dashed rgba(139, 111, 155, 0.9);
+    background: rgba(139, 111, 155, 0.15);
+    pointer-events: none;
+    z-index: 6;
+    box-sizing: border-box;
+  }
+
+  /* ===== Moving platform config popover ===== */
+  .mv-popover {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    padding: 12px;
+    width: 220px;
+    z-index: 50;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    display: none;
+  }
+  .mv-popover.show { display: block; }
+  .mv-popover h4 {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .mv-popover .field { margin-bottom: 8px; }
+  .mv-popover .seg {
+    display: flex;
+    border: 1px solid var(--line);
+  }
+  .mv-popover .seg button {
+    flex: 1;
+    background: var(--panel-2);
+    border: none;
+    color: var(--ink);
+    padding: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+  }
+  .mv-popover .seg button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .mv-popover .mv-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .mv-popover .mv-actions button {
+    flex: 1;
+    padding: 7px;
+    font-size: 11px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  .mv-popover .mv-apply  { background: var(--accent); color: var(--bg); }
+  .mv-popover .mv-delete { background: transparent; color: var(--red); border: 1px solid var(--line) !important; }
 </style>
 </head>
 <body>
@@ -386,6 +498,37 @@
   </div>
 </div>
 
+<!-- Moving platform configuration popover. Position is set in JS. -->
+<div class="mv-popover" id="mvPopover">
+  <h4 data-i18n="mv_title">Moving Platform</h4>
+  <div class="field">
+    <label data-i18n="mv_axis">Axis</label>
+    <div class="seg" id="mvAxisSeg">
+      <button data-val="horizontal" data-i18n="mv_axis_h">Horizontal</button>
+      <button data-val="vertical" data-i18n="mv_axis_v">Vertical</button>
+    </div>
+  </div>
+  <div class="field">
+    <label data-i18n="mv_distance">Distance (tiles)</label>
+    <input type="number" id="mvDistance" min="1" max="20" value="4">
+  </div>
+  <div class="field">
+    <label data-i18n="mv_speed">Speed (tiles/s)</label>
+    <input type="number" id="mvSpeed" min="0.5" max="10" step="0.5" value="2">
+  </div>
+  <div class="field">
+    <label data-i18n="mv_start_dir">Start direction</label>
+    <div class="seg" id="mvDirSeg">
+      <button data-val="-1" data-i18n="mv_dir_neg">−</button>
+      <button data-val="1" data-i18n="mv_dir_pos">+</button>
+    </div>
+  </div>
+  <div class="mv-actions">
+    <button class="mv-apply"  data-i18n="mv_apply"  onclick="applyMovingConfig()">Apply</button>
+    <button class="mv-delete" data-i18n="mv_delete" onclick="deleteMovingFromPopover()">Delete</button>
+  </div>
+</div>
+
 <script>
 // ===== i18n =====
 const I18N = {
@@ -432,6 +575,22 @@ const I18N = {
     invalid_json: 'Invalid JSON: ',
     modal_export: 'Export — ',
     modal_import: 'Import JSON',
+    mv_title: 'Moving Platform',
+    mv_axis: 'Axis',
+    mv_axis_h: 'Horizontal',
+    mv_axis_v: 'Vertical',
+    mv_distance: 'Distance (tiles)',
+    mv_speed: 'Speed (tiles/s)',
+    mv_start_dir: 'Start direction',
+    mv_dir_pos: '+',
+    mv_dir_neg: '−',
+    mv_hint: 'Path preview shows endpoints in the grid.',
+    mv_apply: 'Apply',
+    mv_delete: 'Delete',
+    hint_moving_click: 'Tip: click a placed moving platform to configure it.',
+    tool_collectible: 'Collectible',
+    tool_archer_l: 'Archer ←',
+    tool_archer_r: 'Archer →',
   },
   zh: {
     brand_title: '禁止通行',
@@ -476,6 +635,22 @@ const I18N = {
     invalid_json: 'JSON 格式错误: ',
     modal_export: '导出 — ',
     modal_import: '导入 JSON',
+    mv_title: '移动平台',
+    mv_axis: '方向',
+    mv_axis_h: '横向',
+    mv_axis_v: '纵向',
+    mv_distance: '移动距离 (格)',
+    mv_speed: '速度 (格/秒)',
+    mv_start_dir: '初始方向',
+    mv_dir_pos: '+',
+    mv_dir_neg: '−',
+    mv_hint: '预览线显示两个端点位置.',
+    mv_apply: '应用',
+    mv_delete: '删除',
+    hint_moving_click: '提示: 点击已放置的移动平台可以配置参数.',
+    tool_collectible: '收集物',
+    tool_archer_l: '弓箭手 ←',
+    tool_archer_r: '弓箭手 →',
   }
 };
 
@@ -501,16 +676,29 @@ function setLang(l) {
 
 // ===== Tile types =====
 const TILES = [
-  { id: 'empty',      i18nKey: 'tool_empty',      cls: '',              key: '0' },
-  { id: 'platform',   i18nKey: 'tool_platform',   cls: 't-platform',    key: '1' },
-  { id: 'spike',      i18nKey: 'tool_spike',      cls: 't-spike',       key: '2' },
-  { id: 'start',      i18nKey: 'tool_start',      cls: 't-start',       key: '3' },
-  { id: 'goal',       i18nKey: 'tool_goal',       cls: 't-goal',        key: '4' },
-  { id: 'checkpoint', i18nKey: 'tool_checkpoint', cls: 't-checkpoint',  key: '5' },
-  { id: 'moving',     i18nKey: 'tool_moving',     cls: 't-moving',      key: '6' },
-  { id: 'light_zone', i18nKey: 'tool_light_zone', cls: 't-light-zone',  key: '7' },
+  { id: 'empty',       i18nKey: 'tool_empty',       cls: '',              key: '0' },
+  { id: 'platform',    i18nKey: 'tool_platform',    cls: 't-platform',    key: '1' },
+  { id: 'spike',       i18nKey: 'tool_spike',       cls: 't-spike',       key: '2' },
+  { id: 'start',       i18nKey: 'tool_start',       cls: 't-start',       key: '3' },
+  { id: 'goal',        i18nKey: 'tool_goal',        cls: 't-goal',        key: '4' },
+  { id: 'checkpoint',  i18nKey: 'tool_checkpoint',  cls: 't-checkpoint',  key: '5' },
+  { id: 'moving',      i18nKey: 'tool_moving',      cls: 't-moving',      key: '6' },
+  { id: 'light_zone',  i18nKey: 'tool_light_zone',  cls: 't-light-zone',  key: '7' },
+  { id: 'collectible', i18nKey: 'tool_collectible', cls: 't-collectible', key: '8' },
+  { id: 'archer_l',    i18nKey: 'tool_archer_l',    cls: 't-archer-l',    key: '9' },
+  { id: 'archer_r',    i18nKey: 'tool_archer_r',    cls: 't-archer-r',    key: 'q' },
 ];
 const SINGLETONS = new Set(['start', 'goal']);
+
+// Per-cell extra config for moving platforms, keyed by "x,y".
+// Each entry: { axis: 'horizontal'|'vertical', distance: int, speed: number, start_dir: 1|-1 }
+let movingConfigs = {};
+function mvKey(x, y) { return x + ',' + y; }
+function defaultMovingConfig() {
+  return { axis: 'horizontal', distance: 4, speed: 2, start_dir: 1 };
+}
+// Which platform is currently selected in the popover (or null).
+let mvSelected = null;  // { x, y }
 
 let gridW = 40, gridH = 20;
 let cells = [];
@@ -587,17 +775,183 @@ function renderAll() {
       cell.className = 'cell' + (tile && tile.cls ? ' ' + tile.cls : '');
     }
   }
+  renderMovingPaths();
+  renderArcherPaths();
 }
+
+// ===== Moving platform path preview =====
+// Draws a translucent strip from each moving platform showing its travel
+// range, plus dashed boxes at the two endpoints. Re-rendered on any change.
+function renderMovingPaths() {
+  const grid = document.getElementById('grid');
+  // Remove old previews
+  grid.querySelectorAll('.mv-path, .mv-endpoint').forEach(el => el.remove());
+  // Tile size from rendered cell
+  const tile = grid.firstChild ? grid.firstChild.offsetWidth : 32;
+  for (const key in movingConfigs) {
+    const [sx, sy] = key.split(',').map(Number);
+    if (cells[sy] === undefined || cells[sy][sx] !== 'moving') {
+      // Stale config (cell no longer a moving platform) — drop it
+      delete movingConfigs[key];
+      continue;
+    }
+    const cfg = movingConfigs[key];
+    let endX = sx, endY = sy;
+    if (cfg.axis === 'horizontal') {
+      endX = sx + cfg.start_dir * cfg.distance;
+    } else {
+      endY = sy + cfg.start_dir * cfg.distance;
+    }
+    // Clamp to grid so the preview always renders on-screen
+    endX = Math.max(0, Math.min(gridW - 1, endX));
+    endY = Math.max(0, Math.min(gridH - 1, endY));
+
+    // Strip from origin to endpoint (rectangle covering all in-between cells)
+    const minX = Math.min(sx, endX), maxX = Math.max(sx, endX);
+    const minY = Math.min(sy, endY), maxY = Math.max(sy, endY);
+    const strip = document.createElement('div');
+    strip.className = 'mv-path';
+    strip.style.left   = (minX * tile) + 'px';
+    strip.style.top    = (minY * tile) + 'px';
+    strip.style.width  = ((maxX - minX + 1) * tile) + 'px';
+    strip.style.height = ((maxY - minY + 1) * tile) + 'px';
+    grid.appendChild(strip);
+    // Endpoint marker at the OTHER end (origin shows the platform itself)
+    if (endX !== sx || endY !== sy) {
+      const ep = document.createElement('div');
+      ep.className = 'mv-endpoint';
+      ep.style.left = (endX * tile + 2) + 'px';
+      ep.style.top  = (endY * tile + 2) + 'px';
+      grid.appendChild(ep);
+    }
+  }
+}
+
+// Render dashed arrows showing where each archer's projectile would travel.
+// Stops at the first solid blocker (platform or another archer) or grid edge.
+function renderArcherPaths() {
+  const grid = document.getElementById('grid');
+  grid.querySelectorAll('.archer-path').forEach(el => el.remove());
+  const tile = grid.firstChild ? grid.firstChild.offsetWidth : 32;
+  const BLOCKERS = new Set(['platform', 'archer_l', 'archer_r']);
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const id = cells[y][x];
+      if (id !== 'archer_l' && id !== 'archer_r') continue;
+      const step = (id === 'archer_l') ? -1 : 1;
+      // Scan forward until we hit a blocker or fall off the grid
+      let endX = x;
+      let scan = x + step;
+      while (scan >= 0 && scan < gridW) {
+        if (BLOCKERS.has(cells[y][scan])) break;
+        endX = scan;
+        scan += step;
+      }
+      if (endX === x) continue;  // archer aimed straight into a wall — skip line
+      const minX = Math.min(x, endX), maxX = Math.max(x, endX);
+      const line = document.createElement('div');
+      line.className = 'archer-path';
+      // Start the line just past the archer cell so it doesn't overlap the arrow icon
+      line.style.left  = ((minX + (step > 0 ? 1 : 0)) * tile) + 'px';
+      line.style.top   = (y * tile + tile / 2 - 1) + 'px';
+      line.style.width = ((maxX - minX) * tile) + 'px';
+      grid.appendChild(line);
+    }
+  }
+}
+
+// ===== Moving platform popover =====
+// Click on a placed moving platform → opens a config popover near the cell.
+function openMovingPopover(x, y, clientX, clientY) {
+  mvSelected = { x, y };
+  const cfg = movingConfigs[mvKey(x, y)] || defaultMovingConfig();
+  movingConfigs[mvKey(x, y)] = cfg;  // ensure stored
+
+  // Populate fields
+  document.getElementById('mvDistance').value = cfg.distance;
+  document.getElementById('mvSpeed').value    = cfg.speed;
+  setSeg('mvAxisSeg', cfg.axis);
+  setSeg('mvDirSeg',  String(cfg.start_dir));
+
+  // Position popover near the cursor, keep on-screen
+  const pop = document.getElementById('mvPopover');
+  pop.classList.add('show');
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let px = clientX + 12, py = clientY + 12;
+  if (px + pw > window.innerWidth)  px = clientX - pw - 12;
+  if (py + ph > window.innerHeight) py = clientY - ph - 12;
+  pop.style.left = Math.max(8, px) + 'px';
+  pop.style.top  = Math.max(8, py) + 'px';
+}
+
+function closeMovingPopover() {
+  document.getElementById('mvPopover').classList.remove('show');
+  mvSelected = null;
+}
+
+function setSeg(segId, val) {
+  document.querySelectorAll('#' + segId + ' button').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === val);
+  });
+}
+function getSeg(segId) {
+  const btn = document.querySelector('#' + segId + ' button.active');
+  return btn ? btn.dataset.val : null;
+}
+
+// Wire up segmented controls (click to switch)
+function initSegHandlers() {
+  document.querySelectorAll('.mv-popover .seg button').forEach(b => {
+    b.onclick = () => {
+      const parent = b.parentElement;
+      parent.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    };
+  });
+}
+
+function applyMovingConfig() {
+  if (!mvSelected) return;
+  const key = mvKey(mvSelected.x, mvSelected.y);
+  const dist = Math.max(1, Math.min(20, +document.getElementById('mvDistance').value || 4));
+  const spd  = Math.max(0.5, Math.min(10, +document.getElementById('mvSpeed').value || 2));
+  movingConfigs[key] = {
+    axis:      getSeg('mvAxisSeg') || 'horizontal',
+    distance:  dist,
+    speed:     spd,
+    start_dir: parseInt(getSeg('mvDirSeg') || '1'),
+  };
+  closeMovingPopover();
+  renderMovingPaths();
+}
+
+function deleteMovingFromPopover() {
+  if (!mvSelected) return;
+  const { x, y } = mvSelected;
+  cells[y][x] = 'empty';
+  delete movingConfigs[mvKey(x, y)];
+  const cell = document.getElementById('grid').children[y * gridW + x];
+  cell.className = 'cell';
+  closeMovingPopover();
+  renderMovingPaths();
+}
+
+// Click anywhere outside the popover to close it
+document.addEventListener('pointerdown', e => {
+  const pop = document.getElementById('mvPopover');
+  if (!pop.classList.contains('show')) return;
+  if (pop.contains(e.target)) return;
+  // Don't close if the click is on a moving platform cell (the cell handler
+  // will reopen the popover for that platform anyway).
+  closeMovingPopover();
+}, true);  // capture phase so we run before the grid handler
+
 
 function paintCell(x, y, toolId) {
   if (x < 0 || x >= gridW || y < 0 || y >= gridH) return;
   // Singletons (Start, Goal): only one allowed in the whole level.
-  // When painting via drag, only place on the very first cell of the
-  // stroke — otherwise the marker would jump along with the cursor and
-  // end up wherever you happened to release, which is confusing.
   if (SINGLETONS.has(toolId)) {
     if (isPainting && (lastPaintX !== -1 || lastPaintY !== -1)) {
-      // already placed once this stroke — ignore further cells
       return;
     }
     for (let yy = 0; yy < gridH; yy++) {
@@ -606,11 +960,24 @@ function paintCell(x, y, toolId) {
       }
     }
   }
+  // Track moving platform configs: paint = create, erase = remove
+  const prevId = cells[y][x];
+  if (prevId === 'moving' && toolId !== 'moving') {
+    delete movingConfigs[mvKey(x, y)];
+  }
+  if (toolId === 'moving' && !movingConfigs[mvKey(x, y)]) {
+    movingConfigs[mvKey(x, y)] = defaultMovingConfig();
+  }
   cells[y][x] = toolId;
   const cell = document.getElementById('grid').children[y * gridW + x];
   const tile = TILES.find(t => t.id === toolId);
   if (SINGLETONS.has(toolId)) renderAll();
   else cell.className = 'cell' + (tile && tile.cls ? ' ' + tile.cls : '');
+  // Path previews need to refresh if a moving platform was added/removed
+  if (prevId === 'moving' || toolId === 'moving') renderMovingPaths();
+  // Archer trajectories depend on archers AND on blockers (platforms etc.),
+  // so any non-trivial change can affect them — cheap to re-render.
+  renderArcherPaths();
 }
 
 // Last painted cell — used to interpolate between pointer samples when
@@ -648,6 +1015,16 @@ function onPointerDown(e) {
   const cell = pointerToCell(e);
   if (!cell) return;
   e.preventDefault();
+
+  // Special interaction: clicking an existing moving platform with the
+  // left button opens its config popover instead of painting over it.
+  // (Right-button still erases it normally.)
+  const existing = cells[cell.y][cell.x];
+  if (e.button === 0 && existing === 'moving' && currentTool !== 'empty') {
+    openMovingPopover(cell.x, cell.y, e.clientX, e.clientY);
+    return;
+  }
+
   // capture so we keep getting events even if pointer leaves the grid
   e.currentTarget.setPointerCapture(e.pointerId);
   isPainting = true;
@@ -697,6 +1074,8 @@ function resizeGrid() {
 function clearGrid() {
   if (!confirm(t('confirm_clear'))) return;
   cells = Array.from({length: gridH}, () => Array.from({length: gridW}, () => 'empty'));
+  movingConfigs = {};
+  closeMovingPopover();
   renderAll();
 }
 
@@ -709,6 +1088,14 @@ function buildLevelObject() {
       if (id === 'empty') continue;
       if (id === 'start')      { start = {x, y}; continue; }
       if (id === 'goal')       { goal  = {x, y}; continue; }
+      // Attach config for moving platforms
+      if (id === 'moving') {
+        const cfg = movingConfigs[mvKey(x, y)] || defaultMovingConfig();
+        tiles.push({ type: id, x, y,
+          axis: cfg.axis, distance: cfg.distance,
+          speed: cfg.speed, start_dir: cfg.start_dir });
+        continue;
+      }
       tiles.push({ type: id, x, y });
     }
   }
@@ -769,8 +1156,19 @@ function applyLevel(obj) {
     document.getElementById('redDur').value    = obj.traffic_light.red;
   }
   cells = Array.from({length: gridH}, () => Array.from({length: gridW}, () => 'empty'));
+  movingConfigs = {};
   (obj.tiles || []).forEach(tile => {
-    if (tile.y < gridH && tile.x < gridW) cells[tile.y][tile.x] = tile.type;
+    if (tile.y < gridH && tile.x < gridW) {
+      cells[tile.y][tile.x] = tile.type;
+      if (tile.type === 'moving') {
+        movingConfigs[mvKey(tile.x, tile.y)] = {
+          axis:      tile.axis      || 'horizontal',
+          distance:  tile.distance  || 4,
+          speed:     tile.speed     || 2,
+          start_dir: tile.start_dir || 1,
+        };
+      }
+    }
   });
   if (obj.start) cells[obj.start.y][obj.start.x] = 'start';
   if (obj.goal)  cells[obj.goal.y][obj.goal.x]  = 'goal';
@@ -805,6 +1203,7 @@ function closeModal() {
 ensureCells();
 buildTools();
 buildGrid();
+initSegHandlers();
 
 // demo seed
 (function seed() {
@@ -814,6 +1213,17 @@ buildGrid();
   cells[gridH - 4][Math.floor(gridW / 2)] = 'spike';
   cells[gridH - 4][Math.floor(gridW / 2) + 4] = 'checkpoint';
   for (let i = 0; i < 4; i++) cells[gridH - 5][Math.floor(gridW / 2) - 4 + i] = 'light_zone';
+  // Moving platform with visible path
+  const mvX = Math.floor(gridW / 2) + 8, mvY = gridH - 5;
+  cells[mvY][mvX] = 'moving';
+  movingConfigs[mvKey(mvX, mvY)] = { axis: 'horizontal', distance: 4, speed: 2, start_dir: 1 };
+  // Collectibles (must collect all to reach goal)
+  cells[gridH - 6][6] = 'collectible';
+  cells[gridH - 6][Math.floor(gridW / 2) - 6] = 'collectible';
+  cells[gridH - 6][gridW - 8] = 'collectible';
+  // Archers facing each other across an open stretch
+  cells[gridH - 4][gridW - 12] = 'archer_l';
+  cells[gridH - 4][gridW - 18] = 'archer_r';
   renderAll();
 })();
 </script>
